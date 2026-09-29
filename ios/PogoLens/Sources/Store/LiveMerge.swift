@@ -20,7 +20,7 @@ enum LiveMerge {
                 }
             case .moves:
                 if store.attachMoves(fast: rec.reading.fastMove, charged: rec.reading.chargedMoves, at: rec.at) { moves += 1 }
-            case .unknown:
+            case .list, .unknown:
                 break
             }
             if let dust = rec.reading.stardustTotal { store.stardust = dust }

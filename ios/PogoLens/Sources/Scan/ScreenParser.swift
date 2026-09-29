@@ -1,6 +1,6 @@
 import Foundation
 
-enum ScreenKind: String, Codable { case summary, appraisal, moves, unknown }
+enum ScreenKind: String, Codable { case summary, appraisal, moves, list, unknown }
 
 /// What a Pokémon summary screen shows in text. Everything is optional: OCR misses lines, and a
 /// screenshot taken scrolled down (the moves list) has no CP at the top.
@@ -32,9 +32,38 @@ enum ScreenParser {
     static func classify(_ boxes: [TextBox]) -> ScreenKind {
         let labels = ["attack", "defense", "hp"].filter { l in boxes.contains { $0.norm == l && $0.y > 0.5 && $0.x < 0.3 } }.count
         if labels >= 2 { return .appraisal }
-        if cpValue(boxes) != nil { return .summary }
+        // The storage list shows a CP label over every sprite; a summary has exactly one, up top.
+        let cpLabels = boxes.filter { $0.text.range(of: #"(?i)^\s*CP\s*[\d,]{2,5}\s*$"#, options: .regularExpression) != nil }
+        if cpLabels.count >= 3 { return .list }
+        if cpValue(boxes) != nil, hpLine(boxes) != nil { return .summary }
         if moveBoxes(boxes).count >= 2 { return .moves }
         return .unknown
+    }
+
+    /// "82 / 82 HP", or "HP" beside "82 / 82". A bare pair in the middle column counts too, which
+    /// keeps the caught-date "06/26" at the right edge from posing as the HP line.
+    static func hpLine(_ boxes: [TextBox]) -> (box: TextBox, now: Int, max: Int)? {
+        let hpRegex = try! NSRegularExpression(pattern: #"(\d{1,4})\s*/\s*(\d{1,4})"#)
+        for b in boxes where b.y > 0.2 {
+            guard let m = hpRegex.firstMatch(in: b.text, range: NSRange(b.text.startIndex..., in: b.text)),
+                  let r1 = Range(m.range(at: 1), in: b.text), let r2 = Range(m.range(at: 2), in: b.text) else { continue }
+            let labelled = b.norm.contains("hp") || boxes.contains { $0.norm == "hp" && sameRow($0, b) }
+            let now = Int(b.text[r1]) ?? 0, max = Int(b.text[r2]) ?? 0
+            if labelled || (now <= max && max > 9 && b.midX > 0.3 && b.midX < 0.7) { return (b, now, max) }
+        }
+        return nil
+    }
+
+    /// A line that can be a Pokémon's name or nickname: letters, not a CP label, a measurement,
+    /// a date, or a button caption caught mid-transition.
+    static func plausibleName(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: CharacterSet.whitespaces)
+        if t.filter({ $0.isLetter }).count < 3 { return false }
+        if t.range(of: #"(?i)^\s*cp\s*\d"#, options: .regularExpression) != nil { return false }
+        if t.range(of: #"(?i)^[\d.,]+\s*(m|kg)$"#, options: .regularExpression) != nil { return false }
+        let n = GameDB.norm(t)
+        if n.contains("pokedex") || ["cp", "hp", "powerup", "evolve", "weight", "height", "stardust"].contains(n) { return false }
+        return true
     }
 
     static func int(_ s: String) -> Int? {
@@ -84,29 +113,15 @@ enum ScreenParser {
         r.cp = cpValue(boxes)
         let cpTop = cpBox(boxes)
 
-        // HP: "82 / 82 HP", or "HP" beside "82 / 82". A bare pair in the middle column counts too,
-        // which keeps the caught-date "06/26" at the right edge from posing as the HP line.
-        let hpRegex = try! NSRegularExpression(pattern: #"(\d{1,4})\s*/\s*(\d{1,4})"#)
         var hpBox: TextBox?
-        for b in boxes where b.y > 0.2 {
-            guard let m = hpRegex.firstMatch(in: b.text, range: NSRange(b.text.startIndex..., in: b.text)),
-                  let r1 = Range(m.range(at: 1), in: b.text), let r2 = Range(m.range(at: 2), in: b.text) else { continue }
-            let labelled = b.norm.contains("hp") || boxes.contains { $0.norm == "hp" && sameRow($0, b) }
-            let now = Int(b.text[r1]) ?? 0, max = Int(b.text[r2]) ?? 0
-            if labelled || (now <= max && max > 9 && b.midX > 0.3 && b.midX < 0.7) {
-                r.hp = now; r.hpMax = max; hpBox = b
-                break
-            }
-        }
+        if let hp = hpLine(boxes) { r.hp = hp.now; r.hpMax = hp.max; hpBox = hp.box }
         let hpY = hpBox?.y ?? 0.62
 
         // Name: the tallest lettered line in the middle column between the CP and the HP line.
         let nameFloor = (cpTop?.maxY ?? 0.1) + 0.02
         let nameZone = boxes.filter { b in
-            guard b.y > nameFloor, b.y < hpY, b.midX > 0.3, b.midX < 0.7 else { return false }
+            guard b.y > nameFloor, b.y < hpY, b.midX > 0.3, b.midX < 0.7, plausibleName(b.text) else { return false }
             let t = b.text.trimmingCharacters(in: CharacterSet.whitespaces)
-            guard t.contains(where: { $0.isLetter }) else { return false }
-            if ["cp", "hp", "powerup", "evolve"].contains(b.norm) { return false }
             return db.type(matching: t) == nil && db.fastMove(matching: t) == nil && db.chargedMove(matching: t) == nil
         }
         if let nameBox = nameZone.max(by: { $0.height < $1.height }) {

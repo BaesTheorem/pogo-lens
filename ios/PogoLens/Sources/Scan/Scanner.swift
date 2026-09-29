@@ -62,7 +62,7 @@ final class Scanner: ObservableObject {
             case .moves:
                 let reading = ScreenParser.parseSummary(boxes)
                 if store.attachMoves(fast: reading.fastMove, charged: reading.chargedMoves, at: shot.created) { moves += 1 } else { skipped += 1 }
-            case .unknown:
+            case .list, .unknown:
                 skipped += 1
             }
             if store.debugExport, kind != .unknown {  // other apps' screenshots stay out of the sync folder

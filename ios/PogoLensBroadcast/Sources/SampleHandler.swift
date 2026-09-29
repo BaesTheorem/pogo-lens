@@ -15,14 +15,17 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var lastAt = Date.distantPast
     private var lastSig: [Int] = []
     private var small: CVPixelBuffer?
-    private var current: (name: String, cp: Int, hp: Int)?
+    private var current = ""            // key of the last Pokémon emitted
+    private var candidate = ""          // a summary seen once, awaiting its confirming frame
+    private var appraisalCandidate = ""
     private var lastAppraisalKey = ""
     private var lastMovesKey = ""
+    private var confirmDue = false      // process the next frame even if the screen is still
     private var seen = 0
     private var banners: Bool { AppGroup.defaults?.object(forKey: "pl-live-banners") as? Bool ?? true }
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
-        seen = 0; current = nil; lastSig = []
+        seen = 0; current = ""; candidate = ""; appraisalCandidate = ""; lastSig = []
         notify("Live scan on", body: "Open Pokémon GO and page through your Pokémon. Open Appraise for exact IVs.")
     }
 
@@ -31,11 +34,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
-        guard sampleBufferType == .video, !busy, Date().timeIntervalSince(lastAt) > 0.7,
-              let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard sampleBufferType == .video, !busy, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // CP counters and appraisal bars animate when a screen opens, so nothing is trusted until
+        // a second frame half a second later agrees. That confirming frame is processed even when
+        // the screen has stopped changing.
+        let elapsed = Date().timeIntervalSince(lastAt)
+        let confirming = confirmDue && elapsed > 0.5
+        guard confirming || elapsed > 0.7 else { return }
         let sig = signature(pb)
-        guard differs(sig, from: lastSig), let frame = downscale(pb) else { return }
-        busy = true; lastAt = Date(); lastSig = sig
+        guard confirming || differs(sig, from: lastSig), let frame = downscale(pb) else { return }
+        busy = true; lastAt = Date(); lastSig = sig; confirmDue = false
         queue.async { [self] in
             defer { busy = false }
             handle(frame)
@@ -97,12 +105,16 @@ final class SampleHandler: RPBroadcastSampleHandler {
         case .summary:
             let r = ScreenParser.parseSummary(boxes)
             guard let name = r.name, let cp = r.cp else { return }
-            let hp = r.hpMax ?? 0
-            if let c = current, c.name == name, c.cp == cp, c.hp == hp { return }  // same Pokémon still on screen
-            current = (name, cp, hp)
+            let key = "\(name)|\(cp)|\(r.hpMax ?? 0)"
+            if key == current { return }                       // same Pokémon still on screen
+            guard key == candidate else { candidate = key; confirmDue = true; return }
+            candidate = ""
+            guard let mon = BoxBuilder.build(r, at: Date(), asset: "live") else { return }
+            if mon.species != nil, r.dust != nil, mon.candidates.isEmpty { return }  // CP or HP still animating
+            current = key
             seen += 1
             LiveLog.append(LiveRecord(at: Date(), kind: .summary, reading: r, appraisal: nil))
-            if banners, let mon = BoxBuilder.build(r, at: Date(), asset: "live") {
+            if banners {
                 let pct = mon.ivPercent.map { String(format: " (%.0f%%)", $0) } ?? ""
                 notify(mon.displayName, body: "CP \(mon.cp) · \(mon.ivText)\(pct) · L\(mon.levelText) · \(seen) read")
             }
@@ -110,7 +122,9 @@ final class SampleHandler: RPBroadcastSampleHandler {
             let r = ScreenParser.parseSummary(boxes)
             guard let px = BGRABuffer(frame), let iv = AppraisalReader.read(px, boxes: boxes) else { return }
             let key = "\(r.name ?? "")/\(r.cp ?? 0)/\(iv.atk)/\(iv.def)/\(iv.sta)"
-            guard key != lastAppraisalKey else { return }
+            if key == lastAppraisalKey { return }
+            guard key == appraisalCandidate else { appraisalCandidate = key; confirmDue = true; return }
+            appraisalCandidate = ""
             lastAppraisalKey = key
             LiveLog.append(LiveRecord(at: Date(), kind: .appraisal, reading: r, appraisal: iv))
             if banners {
@@ -123,7 +137,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             guard key != "|", key != lastMovesKey else { return }
             lastMovesKey = key
             LiveLog.append(LiveRecord(at: Date(), kind: .moves, reading: r, appraisal: nil))
-        case .unknown:
+        case .list, .unknown:
             break
         }
     }
