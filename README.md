@@ -53,7 +53,16 @@ Every screen is one more classifier and parser in `ScreenParser.swift`. In order
 4. Today view: field, timed and special research and their rewards.
 5. Gym detail (defenders, team, motivation) and the Nearby raids panel.
 6. Items and eggs.
-7. A ReplayKit broadcast extension for live scanning while playing, instead of screenshots.
+7. **Live overlay.** iOS has no draw-over-apps overlay (that is Android, and how Calcy IV
+   works there). The iOS equivalent is a ReplayKit Broadcast Upload Extension: the player
+   starts a screen broadcast to Pogo Lens from Control Center, iOS streams every frame of
+   Pokémon GO to the extension while they play, the extension samples a frame a second,
+   OCRs it, and writes each read to an App Group container. The readout comes back over the
+   game as a local notification banner first, then a Dynamic Island Live Activity. Niantic
+   sees a system screen recording, which players do all the time. Needs an App Group
+   entitlement and the extension's 50 MB memory ceiling respected (fast OCR on a downscaled,
+   change-detected frame). Calibration comes first: constant scanning with untuned parsers is
+   constant noise.
 
 ## Calibration
 
