@@ -26,6 +26,19 @@ account banned: there is no player API, and every protocol-level client is a ban
 A nicknamed Pokémon is identified from its typing and moves; when several species fit, the
 detail view offers a picker. Lucky, shadow, purified and favorite are toggles for now.
 
+## Live scan (no screenshots)
+
+Tap the broadcast icon in the **Live scan** row, choose Start Broadcast, switch to Pokémon GO
+and open each Pokémon (Appraise for exact IVs). iOS streams the screen to the app's Broadcast
+Upload Extension; about once a second, when the screen has changed, it downscales one frame
+to 720 px, OCRs it and parses it exactly as the screenshot path does. Each newly opened
+Pokémon is logged to the App Group and announced with one replaced banner over the game.
+Stop the broadcast from the red status pill; back in Pogo Lens the readings merge into the
+box (a Pokémon seen again within a day is refreshed, not duplicated) and the CSV exports.
+
+The extension lives under a memory ceiling of about 50 MB, hence the pacing, the downscale
+into one reused BGRA buffer, and never keeping a full-resolution copy.
+
 ## Build and install
 
 ```sh
@@ -36,6 +49,9 @@ scripts/install.sh          # signed build, install and launch on the paired iPh
 ```
 
 XcodeGen (`project.yml`) generates the project; the `.xcodeproj` is not committed. iOS 17+.
+The App Group both targets share needs Xcode to talk to Apple's portal once: if `xcodebuild`
+stops with "No Accounts", sign in under Xcode > Settings > Accounts and rerun; the group and
+the extension's App ID are registered automatically after that.
 
 ## Data
 
