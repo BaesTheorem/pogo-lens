@@ -25,12 +25,14 @@ enum ScreenshotSource {
         var predicates = [NSPredicate(format: "(mediaSubtypes & %d) != 0", PHAssetMediaSubtype.photoScreenshot.rawValue)]
         if let since { predicates.append(NSPredicate(format: "creationDate > %@", since as NSDate)) }
         options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
-        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        // Newest first so the cap keeps the recent screenshots, then chronological for processing,
+        // so an appraisal always follows the summary it belongs to.
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.fetchLimit = limit
         let result = PHAsset.fetchAssets(with: .image, options: options)
         var out: [PHAsset] = []
         result.enumerateObjects { asset, _, _ in out.append(asset) }
-        return out
+        return out.reversed()
     }
 
     static func load(_ asset: PHAsset) async -> Screenshot? {

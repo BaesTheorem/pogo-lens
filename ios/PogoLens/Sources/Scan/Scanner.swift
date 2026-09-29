@@ -10,7 +10,13 @@ final class Scanner: ObservableObject {
 
     private let db = GameDB.shared
 
+    enum Mode { case new, recent(days: Int), everything }
+
     func scanNew(into store: BoxStore, everything: Bool = false) async {
+        await scan(into: store, mode: everything ? .everything : .new)
+    }
+
+    func scan(into store: BoxStore, mode: Mode) async {
         guard !isScanning else { return }
         isScanning = true
         defer { isScanning = false }
@@ -20,9 +26,18 @@ final class Scanner: ObservableObject {
             lastReport = error.localizedDescription
             return
         }
-        let assets = ScreenshotSource.assets(since: everything ? nil : store.lastScan)
+        let since: Date?
+        let limit: Int
+        switch mode {
+        case .new: since = store.lastScan; limit = 400
+        case .recent(let days): since = Date().addingTimeInterval(-Double(days) * 86400); limit = 400
+        case .everything: since = nil; limit = 300
+        }
+        progress = "Finding screenshots"
+        let assets = ScreenshotSource.assets(since: since, limit: limit)
         if assets.isEmpty {
-            lastReport = "No new screenshots since \(store.lastScan.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "ever")."
+            lastReport = "No screenshots to scan since \(since.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "ever")."
+            progress = ""
             return
         }
         var summaries = 0, appraisals = 0, moves = 0, skipped = 0

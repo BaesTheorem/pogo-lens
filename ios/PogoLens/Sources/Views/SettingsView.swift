@@ -25,10 +25,17 @@ struct SettingsView: View {
                 }
                 Section {
                     LabeledContent("Last scan", value: store.lastScan?.formatted(date: .abbreviated, time: .shortened) ?? "never")
-                    Button("Rescan every screenshot") {
-                        Task { await scanner.scanNew(into: store, everything: true); message = scanner.lastReport }
+                    Button("Rescan the last 7 days") {
+                        Task { await scanner.scan(into: store, mode: .recent(days: 7)); message = scanner.lastReport }
                     }
                     .disabled(scanner.isScanning)
+                    Button("Rescan the newest 300 screenshots") {
+                        Task { await scanner.scan(into: store, mode: .everything); message = scanner.lastReport }
+                    }
+                    .disabled(scanner.isScanning)
+                    if scanner.isScanning {
+                        HStack { ProgressView(); Text(scanner.progress.isEmpty ? "Scanning" : scanner.progress).font(.footnote) }
+                    }
                     Toggle("Write OCR debug files to the sync folder", isOn: $store.debugExport)
                     if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
                 } header: {
