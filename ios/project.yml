@@ -39,6 +39,14 @@ targets:
         UIUserInterfaceStyle: Dark
         # Reads your own Pokémon GO screenshots from the photo library; never writes to it.
         NSPhotoLibraryUsageDescription: Pogo Lens reads your Pokémon GO screenshots to record each Pokémon's CP, HP, moves and IVs. Nothing is uploaded.
+    entitlements:
+      path: PogoLens/PogoLens.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.alexhedtke.pogolens
+    dependencies:
+      - target: PogoLensBroadcast
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alexhedtke.pogolens
@@ -49,3 +57,39 @@ targets:
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_STRICT_CONCURRENCY: minimal
+
+  PogoLensBroadcast:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PogoLensBroadcast/Sources
+      - path: PogoLens/Sources/Model
+      - path: PogoLens/Sources/Shared
+      - path: PogoLens/Sources/Scan/TextRecognizer.swift
+      - path: PogoLens/Sources/Scan/ScreenParser.swift
+      - path: PogoLens/Sources/Scan/AppraisalReader.swift
+      - path: PogoLens/Resources/Data/gamedata.json
+    info:
+      path: PogoLensBroadcast/Info.plist
+      properties:
+        CFBundleDisplayName: Pogo Lens
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    entitlements:
+      path: PogoLensBroadcast/PogoLensBroadcast.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.alexhedtke.pogolens
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alexhedtke.pogolens.broadcast
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        SKIP_INSTALL: YES

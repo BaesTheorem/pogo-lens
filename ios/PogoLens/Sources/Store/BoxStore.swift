@@ -48,6 +48,29 @@ final class BoxStore: ObservableObject {
         }
     }
 
+    /// A live reading has no screenshot to key on: the same species, CP and HP within the last
+    /// day is the same Pokémon, so its fields are refreshed and its exact IVs kept.
+    func upsertLive(_ mon: ScannedPokemon) {
+        let cutoff = mon.scannedAt.addingTimeInterval(-86400)
+        if let i = pokemon.firstIndex(where: {
+            $0.scannedAt > cutoff && $0.cp == mon.cp && $0.hpMax == mon.hpMax
+                && GameDB.norm($0.nameOnScreen) == GameDB.norm(mon.nameOnScreen)
+        }) {
+            var kept = mon
+            kept.id = pokemon[i].id
+            kept.assetIdentifier = pokemon[i].assetIdentifier
+            kept.lucky = pokemon[i].lucky; kept.shadow = pokemon[i].shadow; kept.purified = pokemon[i].purified; kept.favorite = pokemon[i].favorite
+            if pokemon[i].ivExact, let a = pokemon[i].atk, let d = pokemon[i].def, let s = pokemon[i].sta {
+                kept.adoptAppraisal(atk: a, def: d, sta: s, asset: pokemon[i].appraisalAssetIdentifier ?? "live-appraisal")
+            }
+            if kept.fastMove == nil { kept.fastMove = pokemon[i].fastMove }
+            if kept.chargedMoves.isEmpty { kept.chargedMoves = pokemon[i].chargedMoves }
+            pokemon[i] = kept
+        } else {
+            pokemon.append(mon)
+        }
+    }
+
     /// An appraisal screenshot carries the Pokémon's CP and name too, so it matches on those;
     /// failing that, the most recent summary within ten minutes that lacks exact IVs.
     func attachAppraisal(_ iv: AppraisalReading, cp: Int?, name: String?, asset: String, at when: Date) -> Bool {

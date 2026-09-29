@@ -44,6 +44,13 @@ struct SettingsView: View {
                     Text("Debug files hold the text the OCR saw on each screenshot, with positions, so the parsers can be tuned on the Mac. Turn it off once scans look right.")
                 }
                 Section {
+                    Toggle("Banner for each Pokémon read during a live scan", isOn: Binding(
+                        get: { AppGroup.defaults?.object(forKey: "pl-live-banners") as? Bool ?? true },
+                        set: { AppGroup.defaults?.set($0, forKey: "pl-live-banners") }))
+                } header: {
+                    Text("Live scan")
+                }
+                Section {
                     Button("Clear the box", role: .destructive) { store.clear() }
                 } footer: {
                     Text("Pogo Lens reads your screenshots only. It never logs in to Pokémon GO and sends nothing to Niantic.")

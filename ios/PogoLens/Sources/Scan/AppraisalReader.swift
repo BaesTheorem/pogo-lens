@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import CoreVideo
 
 /// Reads the three IV bars on the appraisal screen from pixels.
 ///
@@ -16,9 +17,19 @@ struct AppraisalReading: Codable {
     let debug: String
 }
 
+protocol PixelSampler {
+    var width: Int { get }
+    var height: Int { get }
+    func rgb(_ x: Int, _ y: Int) -> (r: Int, g: Int, b: Int)
+}
+
 enum AppraisalReader {
     static func read(image: CGImage, boxes: [TextBox]) -> AppraisalReading? {
         guard let px = PixelBuffer(image) else { return nil }
+        return read(px, boxes: boxes)
+    }
+
+    static func read(_ px: PixelSampler, boxes: [TextBox]) -> AppraisalReading? {
         var values: [String: (Int, Double, String)] = [:]
         for label in ["attack", "defense", "hp"] {
             guard let box = boxes.first(where: { $0.norm == label && $0.y > 0.4 && $0.x < 0.4 }) else { continue }
@@ -29,7 +40,7 @@ enum AppraisalReader {
                                 debug: "atk[\(a.2)] def[\(d.2)] hp[\(h.2)]")
     }
 
-    private static func readBar(_ px: PixelBuffer, labelBox: TextBox) -> (Int, Double, String)? {
+    private static func readBar(_ px: PixelSampler, labelBox: TextBox) -> (Int, Double, String)? {
         let w = Double(px.width), h = Double(px.height)
         let labelH = labelBox.height * h
         let x0 = max(0, Int((labelBox.x - 0.01) * w))
@@ -79,7 +90,7 @@ enum AppraisalReader {
 }
 
 /// RGBA8 copy of an image so single pixels can be sampled cheaply.
-struct PixelBuffer {
+struct PixelBuffer: PixelSampler {
     let width: Int
     let height: Int
     private let data: [UInt8]
@@ -98,5 +109,30 @@ struct PixelBuffer {
         let i = (y * width + x) * 4
         guard i >= 0, i + 2 < data.count else { return (0, 0, 0) }
         return (Int(data[i]), Int(data[i + 1]), Int(data[i + 2]))
+    }
+}
+
+/// A 32BGRA CVPixelBuffer (the broadcast extension's downscaled frame), copied out so the
+/// buffer can be unlocked before the bars are read.
+struct BGRABuffer: PixelSampler {
+    let width: Int
+    let height: Int
+    private let bytesPerRow: Int
+    private let data: Data
+
+    init?(_ pb: CVPixelBuffer) {
+        guard CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_32BGRA else { return nil }
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+        width = CVPixelBufferGetWidth(pb); height = CVPixelBufferGetHeight(pb)
+        bytesPerRow = CVPixelBufferGetBytesPerRow(pb)
+        data = Data(bytes: base, count: bytesPerRow * height)
+    }
+
+    func rgb(_ x: Int, _ y: Int) -> (r: Int, g: Int, b: Int) {
+        let i = y * bytesPerRow + x * 4
+        guard i >= 0, i + 2 < data.count else { return (0, 0, 0) }
+        return (Int(data[i + 2]), Int(data[i + 1]), Int(data[i]))
     }
 }

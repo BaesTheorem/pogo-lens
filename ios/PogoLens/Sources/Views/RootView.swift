@@ -5,7 +5,9 @@ struct RootView: View {
     @StateObject private var scanner = Scanner()
     @State private var showSettings = false
     @State private var exportMessage: String?
+    @State private var liveMessage: String?
     @State private var query = ""
+    @Environment(\.scenePhase) private var scenePhase
 
     private var shown: [ScannedPokemon] {
         let q = GameDB.norm(query)
@@ -37,6 +39,9 @@ struct RootView: View {
                     Text("In Pokémon GO, open a Pokémon and screenshot it. Screenshot its appraisal too for exact IVs. Then come back and scan.")
                 }
 
+                LiveScanSection(message: $liveMessage)
+                if let liveMessage { Section { Text(liveMessage).font(.footnote).foregroundStyle(.secondary) } }
+
                 Section("\(store.pokemon.count) Pokémon" + (store.lastScan.map { ", last scan \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "")) {
                     ForEach(shown) { mon in
                         NavigationLink(value: mon.id) { PokemonRow(mon: mon) }
@@ -62,6 +67,9 @@ struct RootView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active, let report = LiveMerge.run(into: store) { liveMessage = report }
+            }
         }
     }
 }
