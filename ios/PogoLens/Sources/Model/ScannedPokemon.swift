@@ -92,6 +92,4 @@ struct ScannedPokemon: Codable, Identifiable, Hashable {
         if !narrowed.isEmpty { candidates = narrowed }
         return true
     }
-        if !narrowed.isEmpty { candidates = narrowed }
-    }
 }
