@@ -49,6 +49,18 @@ enum CloudFolderSync {
         return url
     }
 
+    /// One file from the folder, or nil when absent, unreadable, or no folder is chosen.
+    static func read(fileName: String) -> Data? {
+        guard let folder = try? resolve(), folder.startAccessingSecurityScopedResource() else { return nil }
+        defer { folder.stopAccessingSecurityScopedResource() }
+        let url = folder.appendingPathComponent(fileName)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)  // an evicted iCloud copy
+            return nil
+        }
+        return try? Data(contentsOf: url)
+    }
+
     /// Write one file into the folder; returns its URL.
     @discardableResult
     static func write(_ payload: Data, fileName: String) throws -> URL {

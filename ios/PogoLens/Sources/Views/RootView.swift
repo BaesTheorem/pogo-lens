@@ -39,6 +39,14 @@ struct RootView: View {
                     Text("In Pokémon GO, open a Pokémon and screenshot it. Screenshot its appraisal too for exact IVs. Then come back and scan.")
                 }
 
+                Section {
+                    NavigationLink { SearchStringsView() } label: {
+                        Label("Search strings", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                } footer: {
+                    Text("Storage search filters to copy and paste in Pokémon GO. MIST adds more through the sync folder.")
+                }
+
                 LiveScanSection(message: $liveMessage)
                 if let liveMessage { Section { Text(liveMessage).font(.footnote).foregroundStyle(.secondary) } }
 
