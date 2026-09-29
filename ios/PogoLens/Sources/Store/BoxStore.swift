@@ -9,6 +9,7 @@ final class BoxStore: ObservableObject {
     @Published var autoExport: Bool { didSet { UserDefaults.standard.set(autoExport, forKey: "pl-auto-export") } }
     @Published var debugExport: Bool { didSet { UserDefaults.standard.set(debugExport, forKey: "pl-debug-export") } }
     @Published var lastError: String?
+    @Published var stardust: Int? { didSet { UserDefaults.standard.set(stardust, forKey: "pl-stardust") } }
 
     private let fileURL: URL = {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -20,6 +21,7 @@ final class BoxStore: ObservableObject {
         lastScan = d.object(forKey: "pl-last-scan") as? Date
         autoExport = d.object(forKey: "pl-auto-export") as? Bool ?? true
         debugExport = d.object(forKey: "pl-debug-export") as? Bool ?? false
+        stardust = d.object(forKey: "pl-stardust") as? Int
         if let raw = try? Data(contentsOf: fileURL), let list = try? JSONDecoder().decode([ScannedPokemon].self, from: raw) {
             pokemon = list
         }
@@ -46,15 +48,34 @@ final class BoxStore: ObservableObject {
         }
     }
 
-    /// An appraisal screenshot belongs to the most recent summary taken within ten minutes
-    /// before it that has no exact IVs yet. Returns false when nothing fits.
-    func attachAppraisal(_ iv: AppraisalReading, asset: String, at when: Date) -> Bool {
-        let window = when.addingTimeInterval(-600)...when.addingTimeInterval(120)
-        guard let i = pokemon.indices
-            .filter({ window.contains(pokemon[$0].scannedAt) && !(pokemon[$0].ivExact && pokemon[$0].appraisalAssetIdentifier != nil) })
-            .max(by: { pokemon[$0].scannedAt < pokemon[$1].scannedAt }) else { return false }
+    /// An appraisal screenshot carries the Pokémon's CP and name too, so it matches on those;
+    /// failing that, the most recent summary within ten minutes that lacks exact IVs.
+    func attachAppraisal(_ iv: AppraisalReading, cp: Int?, name: String?, asset: String, at when: Date) -> Bool {
+        var index: Int?
+        if let cp {
+            let byCP = pokemon.indices.filter { pokemon[$0].cp == cp && (name == nil || GameDB.norm(pokemon[$0].nameOnScreen) == GameDB.norm(name!)) }
+            index = byCP.max { pokemon[$0].scannedAt < pokemon[$1].scannedAt }
+        }
+        if index == nil {
+            let window = when.addingTimeInterval(-600)...when.addingTimeInterval(120)
+            index = pokemon.indices
+                .filter { window.contains(pokemon[$0].scannedAt) && !(pokemon[$0].ivExact && pokemon[$0].appraisalAssetIdentifier != nil) }
+                .max { pokemon[$0].scannedAt < pokemon[$1].scannedAt }
+        }
+        guard let i = index else { return false }
         pokemon[i].adoptAppraisal(atk: iv.atk, def: iv.def, sta: iv.sta, asset: asset)
         if iv.confidence < 0.5 { pokemon[i].notes.append("appraisal bars read with low confidence (\(iv.debug))") }
+        return true
+    }
+
+    /// A scrolled-down screenshot shows the moves; it belongs to the summary taken just before.
+    func attachMoves(fast: String?, charged: [String], at when: Date) -> Bool {
+        guard fast != nil || !charged.isEmpty else { return false }
+        let window = when.addingTimeInterval(-600)...when.addingTimeInterval(120)
+        guard let i = pokemon.indices.filter({ window.contains(pokemon[$0].scannedAt) }).max(by: { pokemon[$0].scannedAt < pokemon[$1].scannedAt }) else { return false }
+        if let fast { pokemon[i].fastMove = fast }
+        for c in charged where !pokemon[i].chargedMoves.contains(c) { pokemon[i].chargedMoves.append(c) }
+        pokemon[i].notes.removeAll { $0.hasPrefix("moves below the fold") }
         return true
     }
 
@@ -93,7 +114,8 @@ final class BoxStore: ObservableObject {
 
     static let csvHeader = ["Index", "Name", "Form", "Pokemon", "Gender", "CP", "HP", "Atk IV", "Def IV", "Sta IV", "IV Avg",
                             "Level Min", "Level Max", "Quick Move", "Charge Move", "Charge Move 2", "Lucky", "Shadow/Purified",
-                            "Favorite", "Rank # (G)", "Name (G)", "Nickname", "Dust", "IV Exact", "Candidates", "Scan Date", "Source"]
+                            "Favorite", "Rank # (G)", "Name (G)", "Nickname", "Dust", "IV Exact", "Candidates", "Scan Date", "Source",
+                            "Candy", "Candy XL", "Mega Energy", "Evolve Candy", "Caught Date"]
 
     func csvText() -> String {
         var lines = [BoxStore.csvHeader.joined(separator: ",")]
@@ -113,6 +135,8 @@ final class BoxStore: ObservableObject {
                 m.lucky ? "1" : "0", m.shadow ? "1" : (m.purified ? "2" : "0"), m.favorite ? "1" : "0",
                 "", "", nick, m.dust.map(String.init) ?? "", m.ivExact ? "1" : "0", String(m.candidates.count),
                 iso.string(from: m.scannedAt), "pogolens",
+                m.candyOnHand.map(String.init) ?? "", m.candyXL.map(String.init) ?? "", m.megaEnergy.map(String.init) ?? "",
+                m.evolveCandy.map(String.init) ?? "", m.caughtDate ?? "",
             ]
             lines.append(row.map(BoxStore.csvCell).joined(separator: ","))
         }
@@ -142,6 +166,10 @@ final class BoxStore: ObservableObject {
         let safe = shot.replacingOccurrences(of: "/", with: "_")
         guard let data = try? JSONEncoder().encode(Dump(asset: shot, kind: kind, boxes: boxes)) else { return }
         _ = try? CloudFolderSync.write(data, fileName: "pogolens-debug-\(safe).json")
+    }
+
+    func writeDebugData(_ data: Data, name: String) {
+        _ = try? CloudFolderSync.write(data, fileName: name)
     }
 
     private static func stamp() -> String {

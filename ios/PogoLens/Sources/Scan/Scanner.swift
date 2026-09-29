@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Runs OCR over new screenshots and folds the readings into the box.
 @MainActor
@@ -24,7 +25,7 @@ final class Scanner: ObservableObject {
             lastReport = "No new screenshots since \(store.lastScan.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "ever")."
             return
         }
-        var summaries = 0, appraisals = 0, skipped = 0
+        var summaries = 0, appraisals = 0, moves = 0, skipped = 0
         for (i, asset) in assets.enumerated() {
             progress = "Reading screenshot \(i + 1) of \(assets.count)"
             guard let shot = await ScreenshotSource.load(asset) else { skipped += 1; continue }
@@ -36,24 +37,36 @@ final class Scanner: ObservableObject {
                 let reading = ScreenParser.parseSummary(boxes)
                 if let mon = build(reading, shot: shot) {
                     store.upsert(mon)
+                    if let dust = reading.stardustTotal { store.stardust = dust }
                     summaries += 1
                 } else { skipped += 1 }
             case .appraisal:
-                if let iv = AppraisalReader.read(image: shot.image, boxes: boxes), store.attachAppraisal(iv, asset: shot.identifier, at: shot.created) {
+                let head = ScreenParser.parseSummary(boxes)
+                if let iv = AppraisalReader.read(image: shot.image, boxes: boxes),
+                   store.attachAppraisal(iv, cp: head.cp, name: head.name, asset: shot.identifier, at: shot.created) {
                     appraisals += 1
                 } else { skipped += 1 }
+            case .moves:
+                let reading = ScreenParser.parseSummary(boxes)
+                if store.attachMoves(fast: reading.fastMove, charged: reading.chargedMoves, at: shot.created) { moves += 1 } else { skipped += 1 }
             case .unknown:
                 skipped += 1
             }
-            if store.debugExport { store.writeDebug(shot: shot.identifier, kind: kind, boxes: boxes) }
+            if store.debugExport {
+                store.writeDebug(shot: shot.identifier, kind: kind, boxes: boxes)
+                if kind != .unknown, let jpeg = UIImage(cgImage: shot.image).jpegData(compressionQuality: 0.75) {
+                    store.writeDebugData(jpeg, name: "pogolens-debug-\(shot.identifier.replacingOccurrences(of: "/", with: "_")).jpg")
+                }
+            }
             store.lastScan = max(store.lastScan ?? .distantPast, shot.created)
         }
         store.save()
-        if store.autoExport, store.pokemon.count > 0, summaries + appraisals > 0 {
-            do { let url = try store.exportCSV(); lastReport = "Read \(summaries) Pokémon and \(appraisals) appraisals from \(assets.count) screenshots; exported to \(url.lastPathComponent)." }
-            catch { lastReport = "Read \(summaries) Pokémon, \(appraisals) appraisals; export failed: \(error.localizedDescription)" }
+        let read = "Read \(summaries) Pokémon, \(appraisals) appraisals, \(moves) move lists from \(assets.count) screenshots (\(skipped) skipped)."
+        if store.autoExport, !store.pokemon.isEmpty, summaries + appraisals + moves > 0 {
+            do { let url = try store.exportCSV(); lastReport = read + " Exported \(url.lastPathComponent)." }
+            catch { lastReport = read + " Export failed: \(error.localizedDescription)" }
         } else {
-            lastReport = "Read \(summaries) Pokémon and \(appraisals) appraisals from \(assets.count) screenshots (\(skipped) were not Pokémon GO screens)."
+            lastReport = read
         }
         progress = ""
     }
@@ -62,6 +75,8 @@ final class Scanner: ObservableObject {
         guard let cp = r.cp, let name = r.name else { return nil }
         var mon = ScannedPokemon(scannedAt: shot.created, assetIdentifier: shot.identifier, nameOnScreen: name, cp: cp)
         mon.gender = r.gender; mon.hp = r.hp; mon.hpMax = r.hpMax; mon.dust = r.dust; mon.candy = r.candy
+        mon.evolveCandy = r.evolveCandy; mon.candyOnHand = r.candyOnHand; mon.candyXL = r.candyXL; mon.megaEnergy = r.megaEnergy
+        mon.caughtDate = r.caughtDate
         mon.fastMove = r.fastMove; mon.chargedMoves = r.chargedMoves; mon.types = r.types
         mon.weightKg = r.weightKg; mon.heightM = r.heightM; mon.notes = r.notes
 
@@ -78,7 +93,7 @@ final class Scanner: ObservableObject {
         if matches.count == 1 {
             mon.speciesKey = matches[0].key
         } else if let base = matches.first(where: \.isBaseForm), matches.allSatisfy({ $0.id == base.id }) {
-            mon.speciesKey = base.key  // same species, several forms: default to the base form
+            mon.speciesKey = base.key
             if matches.count > 1 { mon.speciesCandidates = matches.map(\.key); mon.notes.append("form not read; base form assumed") }
         } else {
             mon.speciesCandidates = matches.map(\.key)

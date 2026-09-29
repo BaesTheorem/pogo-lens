@@ -48,7 +48,8 @@ final class GameDB {
     private let typeByNorm: [String: String]
 
     private init() {
-        guard let url = Bundle.main.url(forResource: "gamedata", withExtension: "json"),
+        let override = ProcessInfo.processInfo.environment["POGOLENS_GAMEDATA"].map { URL(fileURLWithPath: $0) }
+        guard let url = override ?? Bundle.main.url(forResource: "gamedata", withExtension: "json"),
               let raw = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(GameData.self, from: raw) else {
             fatalError("gamedata.json is missing from the bundle; run scripts/refresh-data.py")

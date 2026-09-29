@@ -17,6 +17,11 @@ struct ScannedPokemon: Codable, Identifiable, Hashable {
     var hpMax: Int?
     var dust: Int?
     var candy: Int?
+    var evolveCandy: Int?
+    var candyOnHand: Int?
+    var candyXL: Int?
+    var megaEnergy: Int?
+    var caughtDate: String?
     var fastMove: String?
     var chargedMoves: [String] = []
     var types: [String] = []

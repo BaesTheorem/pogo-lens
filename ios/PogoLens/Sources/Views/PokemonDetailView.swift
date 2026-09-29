@@ -34,6 +34,10 @@ struct PokemonDetailView: View {
                 LabeledContent("Charged", value: m.chargedMoves.isEmpty ? "?" : m.chargedMoves.joined(separator: ", "))
                 LabeledContent("Types", value: m.types.isEmpty ? "?" : m.types.joined(separator: " / "))
                 LabeledContent("Power-up", value: m.dust.map { "\($0) dust" + (m.candy.map { ", \($0) candy" } ?? "") } ?? "?")
+                if let c = m.candyOnHand { LabeledContent("Candy on hand", value: String(c) + (m.candyXL.map { ", \($0) XL" } ?? "")) }
+                if let e = m.evolveCandy { LabeledContent("Evolve", value: "\(e) candy") }
+                if let me = m.megaEnergy { LabeledContent("Mega energy", value: String(me)) }
+                if let d = m.caughtDate { LabeledContent("Caught", value: d) }
                 if let w = m.weightKg { LabeledContent("Weight", value: String(format: "%.2f kg", w)) }
                 if let h = m.heightM { LabeledContent("Height", value: String(format: "%.2f m", h)) }
                 LabeledContent("Gender", value: m.gender == "m" ? "\u{2642}" : (m.gender == "f" ? "\u{2640}" : "?"))
