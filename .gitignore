@@ -1,0 +1,13 @@
+# Generated Xcode project (regenerate with `xcodegen generate` in ios/)
+ios/PogoLens.xcodeproj/
+ios/build/
+ios/DerivedData/
+
+# Per-machine signing settings
+ios/Config/Signing.xcconfig
+
+# Scan output never lives here; it goes to the sync folder you pick (iCloud Drive/Pokemon GO)
+*.csv
+
+.DS_Store
+__pycache__/

@@ -1,0 +1,52 @@
+# Pogo Lens
+
+An iPhone app that reads your own Pokémon GO screenshots and turns them into a box list:
+species, CP, HP, level, IVs, moves. It writes a CSV in the Poke Genie dialect into a Files
+folder you pick (iCloud Drive / Pokemon GO), where the Mac-side `pogo` CLI in the Exobrain
+harness imports it automatically.
+
+It never logs in to Pokémon GO and never talks to Niantic. Like Poke Genie and Calcy IV, it
+reads pixels. That is the only way to see your own account data live that cannot get the
+account banned: there is no player API, and every protocol-level client is a ban risk.
+
+## How a scan works
+
+1. In Pokémon GO, open a Pokémon and take a screenshot of its summary screen. For exact IVs,
+   open Appraise and screenshot the three bars too.
+2. Open Pogo Lens and tap **Scan new screenshots**. Each screenshot since the last scan goes
+   through Apple's on-device Vision OCR:
+   - **Summary screen**: name (or nickname), CP, HP, types, weight, height, moves, and the
+     power-up dust cost. The dust cost fixes the level bracket; CP and HP then leave one or a
+     few IV combinations, solved with the same formulas the `pogo` CLI uses (`Formula.swift`).
+   - **Appraisal screen**: the three IV bars are read from pixels, located from the OCR'd
+     Attack / Defense / HP labels, and attached to the summary taken just before it.
+3. With **Export CSV after every scan** on and a sync folder chosen, the CSV lands in the folder
+   and the Mac imports it within a minute (`pogo box stats`, `pogo box list`, `pogo box dupes`).
+
+A nicknamed Pokémon is identified from its typing and moves; when several species fit, the
+detail view offers a picker. Lucky, shadow, purified and favorite are toggles for now.
+
+## Build and install
+
+```sh
+cd ios
+cp Config/Signing.xcconfig.example Config/Signing.xcconfig   # set DEVELOPMENT_TEAM
+scripts/build.sh            # unsigned compile check
+scripts/install.sh          # signed build, install and launch on the paired iPhone (Wi-Fi works)
+```
+
+XcodeGen (`project.yml`) generates the project; the `.xcodeproj` is not committed. iOS 17+.
+
+## Data
+
+`ios/PogoLens/Resources/Data/gamedata.json` bundles base stats (megas included), typing, the
+CP multiplier table, dust tiers, move names and movesets from [pogoapi.net](https://pogoapi.net).
+`scripts/refresh-data.py` rebuilds it.
+
+## Calibration
+
+The appraisal bar reader and the summary parser were written against the layout of the
+screens, not against real screenshots, so the first scans on a device will need tuning. Turn
+on **Write OCR debug files to the sync folder** in Settings: each screenshot then also drops
+a `pogolens-debug-*.json` with every recognised line and its position, which is what the
+parsers are tuned from.
