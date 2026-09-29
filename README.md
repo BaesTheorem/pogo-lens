@@ -43,6 +43,18 @@ XcodeGen (`project.yml`) generates the project; the `.xcodeproj` is not committe
 CP multiplier table, dust tiers, move names and movesets from [pogoapi.net](https://pogoapi.net).
 `scripts/refresh-data.py` rebuilds it.
 
+## Roadmap: read more of the game
+
+Every screen is one more classifier and parser in `ScreenParser.swift`. In order of leverage:
+
+1. Storage list view from a scrolled screen recording: name and CP for the whole box in one pass.
+2. Pokédex pages: caught and seen per species, shiny, lucky, shadow, mega, XXL and XXS badges.
+3. Trainer profile: level, XP, medals, lifetime stats.
+4. Today view: field, timed and special research and their rewards.
+5. Gym detail (defenders, team, motivation) and the Nearby raids panel.
+6. Items and eggs.
+7. A ReplayKit broadcast extension for live scanning while playing, instead of screenshots.
+
 ## Calibration
 
 The appraisal bar reader and the summary parser were written against the layout of the
