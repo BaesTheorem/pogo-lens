@@ -67,9 +67,9 @@ final class Scanner: ObservableObject {
             case .unknown:
                 skipped += 1
             }
-            if store.debugExport {
+            if store.debugExport, kind != .unknown {  // other apps' screenshots stay out of the sync folder
                 store.writeDebug(shot: shot.identifier, kind: kind, boxes: boxes)
-                if kind != .unknown, let jpeg = UIImage(cgImage: shot.image).jpegData(compressionQuality: 0.75) {
+                if let jpeg = UIImage(cgImage: shot.image).jpegData(compressionQuality: 0.75) {
                     store.writeDebugData(jpeg, name: "pogolens-debug-\(shot.identifier.replacingOccurrences(of: "/", with: "_")).jpg")
                 }
             }

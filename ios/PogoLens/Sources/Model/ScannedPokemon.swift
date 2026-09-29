@@ -78,11 +78,20 @@ struct ScannedPokemon: Codable, Identifiable, Hashable {
         }
     }
 
-    /// Exact IVs from the appraisal bars narrow the level too.
-    mutating func adoptAppraisal(atk a: Int, def d: Int, sta s: Int, asset: String) {
+    /// Exact IVs from the appraisal bars narrow the level too. A reading that cannot produce
+    /// this CP and HP is a misread of the bars and is refused rather than adopted.
+    @discardableResult
+    mutating func adoptAppraisal(atk a: Int, def d: Int, sta s: Int, asset: String) -> Bool {
+        let narrowed = candidates.filter { $0.atk == a && $0.def == d && $0.sta == s }
+        if !candidates.isEmpty && narrowed.isEmpty {
+            notes.append("appraisal bars read \(a)/\(d)/\(s), which does not fit CP \(cp) and HP \(hpMax ?? hp ?? 0); ignored")
+            return false
+        }
         atk = a; def = d; sta = s; ivExact = true
         appraisalAssetIdentifier = asset
-        let narrowed = candidates.filter { $0.atk == a && $0.def == d && $0.sta == s }
+        if !narrowed.isEmpty { candidates = narrowed }
+        return true
+    }
         if !narrowed.isEmpty { candidates = narrowed }
     }
 }

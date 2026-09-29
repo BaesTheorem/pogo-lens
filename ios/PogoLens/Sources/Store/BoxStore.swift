@@ -63,8 +63,8 @@ final class BoxStore: ObservableObject {
                 .max { pokemon[$0].scannedAt < pokemon[$1].scannedAt }
         }
         guard let i = index else { return false }
-        pokemon[i].adoptAppraisal(atk: iv.atk, def: iv.def, sta: iv.sta, asset: asset)
-        if iv.confidence < 0.5 { pokemon[i].notes.append("appraisal bars read with low confidence (\(iv.debug))") }
+        guard pokemon[i].adoptAppraisal(atk: iv.atk, def: iv.def, sta: iv.sta, asset: asset) else { return false }
+        if iv.confidence < 0.7 { pokemon[i].notes.append("appraisal bars read with low confidence (\(iv.debug))") }
         return true
     }
 
